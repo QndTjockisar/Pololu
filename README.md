@@ -1,2 +1,1 @@
-# Pololu
-Pololu 3Pi
+This is a repo for programming Pololu 3Pi robot.
