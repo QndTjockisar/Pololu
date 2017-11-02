@@ -2,145 +2,111 @@
 #include "test.h"
 #include <stdio.h>
 #include <avr/pgmspace.h>
-// 10 levels of bar graph characters
-const char bar_graph_characters[10] = {' ',0,0,1,2,3,3,4,5,255};
-const char beep[] PROGMEM = "!c32";
-void dosth(){
-		int	speed = 30;
-        //encoders_get_counts_and_reset_m1();
-        //encoders_get_counts_and_reset_m2();
-		
-		while(speed >= -30){
-			set_motors(speed,speed);
-			delay_ms(500);
-			speed -= 5;
-			printf("%d,%d,%d!", speed, encoders_get_counts_m1(), encoders_get_counts_m2());
-		}
-		set_motors(0, 0);
-		printf("Done");
-}
 
-void printsensors(unsigned char readMode){
-	unsigned int sensors[5];
-	read_line_sensors(sensors,readMode);
-	for(int i = 0; i < 5; i++){
-		print_character(bar_graph_characters[sensors[i]/201]);
-	}
-}
-     
-void readcode(unsigned char readMode){
-  //	set_motors(25,25);
-	//	delay_ms(500);
-	
-	for(int i = 0; i < 40; i++){
-		set_motors(20,20);
-		delay_ms(100);
-		set_motors(0, 0);
-		play_from_program_space(beep);
-		clear();
-		printsensors(readMode);
-		delay_ms(2000);
+void run(){
+        struct coord curr_pos;
+	struct coord const * next_pos_p;
+	unsigned int dest_idx, steps;
+
+
+	curr_pos.x = start_pos.x;
+	curr_pos.y = start_pos.y;
+	curr_pos.d = start_pos.d;
+
+	while(!reach_point(&curr_pos, &start_pos)){
+		dest_idx = read_code();
+		if(dest_idx >= NUM_EP){
+			printf("Wrong next pos");
+			continue;
+		}
+
+		next_pos_p = eps + dest_idx;
+
+		while(!reach_point(&curr_pos, next_pos_p)){
+			steps = set_direction(&curr_pos, next_pos_p);
+			follow_line(steps);
+		}
+		turn_direction(&curr_pos, next_pos_p->d);
 	}
 }
 
-char readvalue(unsigned char readMode){
-	char rslt = 0;
-	unsigned int sensors[5];
-	read_line_sensors(sensors,readMode);
-	for(int i = 0; i < 5; i++){
-		if (sensors[i] > 1700){
-			rslt = rslt | (1 << i);
-		}
-	}
-	return rslt;
+void follow_line(unsigned int crosses){
+	/* TODO follow line until n crosess passed */
 }
 
-void count_dots(unsigned char readMode){
-	char reading_0 = 0;
-	char reading_1 = 0;
-	char in_range = 0;
-        char value;
-	char total = 0;
+int reach_point(const struct coord const * curr,
+		const struct coord const * dest){
+	if(curr->x == dest->x && curr->y == dest->y)
+		return 1;
+	else
+		return 0;
+}
 
-	set_motors(20, 20);
-	clear();
-	
-	while(!in_range){
-		delay_ms(100);
-		value = readvalue(readMode);
-		if ((value & 14) == 14){
-			in_range = 1;
-			printf("S");
-		}
-	}
+int set_direction(struct coord* curr_p, struct coord const * dest_p){
+	int diff = 0;
 
-	while(in_range && total<5){
-		delay_ms(100);
-		value = readvalue(readMode);
-		
-		if ((value & 14) == 14){
-			if(in_range < 2){
-				continue;
-			} else {
-				break;
-			}
-		}
-
-		in_range = 2;		
-		
-		if ((value & 16) == 0){
-			if (reading_1){
-				reading_1 = 0;
-			}
+	if(curr_p->x == dest_p->x){
+		diff = curr_p->y - dest_p->y;
+		if(diff > 0){
+			turn_direction(curr_p, S);
 		} else {
-			if(!reading_1){
-			        reading_1 = 1;
-				printf("1");
-				total++;
-			}
+			turn_direction(curr_p, N);
+			diff *= -1;
 		}
-		
-		if ((value & 1) == 0){
-			if (reading_0){
-				reading_0 = 0;
-			}
+	} else if (curr_p->y == dest_p->y){
+		diff = curr_p->x - dest_p->x;
+		if(diff > 0){
+			turn_direction(curr_p, W);
 		} else {
-			if(!reading_0){
-			        reading_0 = 1;
-				printf("0");
-				total++;
-			}
+			turn_direction(curr_p, E);
+			diff *= -1;
 		}
+	} else if (W_EDGE_X == dest_p->x){
+		diff = curr_p->x - dest_p->x;
+		turn_direction(curr_p, W);
+	} else if (E_EDGE_X == dest_p->x){
+		diff = dest_p->x - curr_p->x;
+		turn_direction(curr_p, E);
+	} else	if (S_EDGE_Y == dest_p->y){
+		diff = curr_p->y - dest_p->y;
+		turn_direction(curr_p, S);
+	} else if (N_EDGE_Y == dest_p->y){
+		diff = dest_p->y - curr_p->y;
+		turn_direction(curr_p, N);
 	}
 
-	printf("E");
-
-	set_motors(0,0);
+	return diff;
 }
 
+void turn_degree(unsigned int degree){
+	/* TODO fix this */
+}
 
+void turn_direction(struct coord* curr_p, const enum direction to){
+	unsigned int degree = ((int)to - (int)(curr_p->d) + CYCLE) % CYCLE;
+	if(degree > 0)
+        	turn_degree(degree);
+	curr_p->d = to;
+}
 
-int main()
-{
-	//encoders_init(PD5, PD6, PD3, PB3);
-        pololu_3pi_init(2000);
-	lcd_init_printf();
-	
-	printf("%s", "Started.");
+unsigned int read_code(){
+	/* TODO fix this */
+	return 10;
+}
+
+int main(){
 
 	unsigned char btn = 0;
         while(1){
 	  
-		btn=wait_for_button(ANY_BUTTON);
+		btn = wait_for_button(ANY_BUTTON);
 		switch(btn){
 		case BUTTON_A:
-			count_dots(IR_EMITTERS_ON);
+			run();
 			break;
 		case BUTTON_B:
-			readcode(IR_EMITTERS_ON);
 			break;
 		case BUTTON_C:
-			readcode(IR_EMITTERS_OFF);
 			break;
 		default:
 			break;
